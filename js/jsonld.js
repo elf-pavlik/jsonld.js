@@ -6948,23 +6948,6 @@ var factory = function() {
 wrapper(factory);
 
 // export nodejs API
-if(_nodejs) {
-  module.exports = factory;
-}
-// export AMD API
-else if(typeof define === 'function' && define.amd) {
-  define([], function() {
-    return factory;
-  });
-}
-// export simple browser API
-else if(_browser) {
-  if(typeof jsonld === 'undefined') {
-    jsonld = jsonldjs = factory;
-  }
-  else {
-    jsonldjs = factory;
-  }
-}
+module.exports = factory;
 
 })();
