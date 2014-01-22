@@ -38,21 +38,6 @@
 // determine if in-browser or using node.js
 var _nodejs = (
   typeof process !== 'undefined' && process.versions && process.versions.node);
-var _browser = !_nodejs &&
-  (typeof window !== 'undefined' || typeof self !== 'undefined');
-if(_browser) {
-  if(typeof global === 'undefined') {
-    if(typeof window !== 'undefined') {
-      global = window;
-    }
-    else if(typeof self !== 'undefined') {
-      global = self;
-    }
-    else if(typeof $ !== 'undefined') {
-      global = $;
-    }
-  }
-}
 
 // attaches jsonld API to the given object
 var wrapper = function(jsonld) {
@@ -1036,7 +1021,7 @@ jsonld.promises = function() {
  * @return the promise.
  */
 jsonld.promisify = function(op) {
-  var Promise = _nodejs ? require('./Promise').Promise : global.Promise;
+  var Promise = require('./Promise').Promise;
   var args = Array.prototype.slice.call(arguments, 1);
   return new Promise(function(resolver) {
     op.apply(null, args.concat(function(err, value) {
@@ -1086,21 +1071,6 @@ if(canDefineProperty) {
     configurable: true,
     value: JsonLdProcessor
   });
-}
-
-// setup browser global JsonLdProcessor
-if(_browser && typeof global.JsonLdProcessor === 'undefined') {
-  if(canDefineProperty) {
-    Object.defineProperty(global, 'JsonLdProcessor', {
-      writable: true,
-      enumerable: false,
-      configurable: true,
-      value: JsonLdProcessor
-    });
-  }
-  else {
-    global.JsonLdProcessor = JsonLdProcessor;
-  }
 }
 
 /* Utility API */
@@ -6424,25 +6394,18 @@ Permutator.prototype.next = function() {
 // SHA-1 API
 var sha1 = jsonld.sha1 = {};
 
-if(_nodejs) {
-  var crypto = require('crypto');
-  sha1.create = function() {
-    var md = crypto.createHash('sha1');
-    return {
-      update: function(data) {
-        md.update(data, 'utf8');
-      },
-      digest: function() {
-        return md.digest('hex');
-      }
-    };
+var crypto = require('crypto');
+sha1.create = function() {
+  var md = crypto.createHash('sha1');
+  return {
+    update: function(data) {
+      md.update(data, 'utf8');
+    },
+    digest: function() {
+      return md.digest('hex');
+    }
   };
-}
-else {
-  sha1.create = function() {
-    return new sha1.MessageDigest();
-  };
-}
+};
 
 /**
  * Hashes the given array of quads and returns its hexadecimal SHA-1 message
@@ -6460,327 +6423,6 @@ sha1.hash = function(nquads) {
   return md.digest();
 };
 
-// only define sha1 MessageDigest for non-nodejs
-if(!_nodejs) {
-
-/**
- * Creates a simple byte buffer for message digest operations.
- */
-sha1.Buffer = function() {
-  this.data = '';
-  this.read = 0;
-};
-
-/**
- * Puts a 32-bit integer into this buffer in big-endian order.
- *
- * @param i the 32-bit integer.
- */
-sha1.Buffer.prototype.putInt32 = function(i) {
-  this.data += (
-    String.fromCharCode(i >> 24 & 0xFF) +
-    String.fromCharCode(i >> 16 & 0xFF) +
-    String.fromCharCode(i >> 8 & 0xFF) +
-    String.fromCharCode(i & 0xFF));
-};
-
-/**
- * Gets a 32-bit integer from this buffer in big-endian order and
- * advances the read pointer by 4.
- *
- * @return the word.
- */
-sha1.Buffer.prototype.getInt32 = function() {
-  var rval = (
-    this.data.charCodeAt(this.read) << 24 ^
-    this.data.charCodeAt(this.read + 1) << 16 ^
-    this.data.charCodeAt(this.read + 2) << 8 ^
-    this.data.charCodeAt(this.read + 3));
-  this.read += 4;
-  return rval;
-};
-
-/**
- * Gets the bytes in this buffer.
- *
- * @return a string full of UTF-8 encoded characters.
- */
-sha1.Buffer.prototype.bytes = function() {
-  return this.data.slice(this.read);
-};
-
-/**
- * Gets the number of bytes in this buffer.
- *
- * @return the number of bytes in this buffer.
- */
-sha1.Buffer.prototype.length = function() {
-  return this.data.length - this.read;
-};
-
-/**
- * Compacts this buffer.
- */
-sha1.Buffer.prototype.compact = function() {
-  this.data = this.data.slice(this.read);
-  this.read = 0;
-};
-
-/**
- * Converts this buffer to a hexadecimal string.
- *
- * @return a hexadecimal string.
- */
-sha1.Buffer.prototype.toHex = function() {
-  var rval = '';
-  for(var i = this.read; i < this.data.length; ++i) {
-    var b = this.data.charCodeAt(i);
-    if(b < 16) {
-      rval += '0';
-    }
-    rval += b.toString(16);
-  }
-  return rval;
-};
-
-/**
- * Creates a SHA-1 message digest object.
- *
- * @return a message digest object.
- */
-sha1.MessageDigest = function() {
-  // do initialization as necessary
-  if(!_sha1.initialized) {
-    _sha1.init();
-  }
-
-  this.blockLength = 64;
-  this.digestLength = 20;
-  // length of message so far (does not including padding)
-  this.messageLength = 0;
-
-  // input buffer
-  this.input = new sha1.Buffer();
-
-  // for storing words in the SHA-1 algorithm
-  this.words = new Array(80);
-
-  // SHA-1 state contains five 32-bit integers
-  this.state = {
-    h0: 0x67452301,
-    h1: 0xEFCDAB89,
-    h2: 0x98BADCFE,
-    h3: 0x10325476,
-    h4: 0xC3D2E1F0
-  };
-};
-
-/**
- * Updates the digest with the given string input.
- *
- * @param msg the message input to update with.
- */
-sha1.MessageDigest.prototype.update = function(msg) {
-  // UTF-8 encode message
-  msg = unescape(encodeURIComponent(msg));
-
-  // update message length and input buffer
-  this.messageLength += msg.length;
-  this.input.data += msg;
-
-  // process input
-  _sha1.update(this.state, this.words, this.input);
-
-  // compact input buffer every 2K or if empty
-  if(this.input.read > 2048 || this.input.length() === 0) {
-    this.input.compact();
-  }
-};
-
-/**
- * Produces the digest.
- *
- * @return the digest as a hexadecimal string.
- */
-sha1.MessageDigest.prototype.digest = function() {
-  /* Determine the number of bytes that must be added to the message
-  to ensure its length is congruent to 448 mod 512. In other words,
-  a 64-bit integer that gives the length of the message will be
-  appended to the message and whatever the length of the message is
-  plus 64 bits must be a multiple of 512. So the length of the
-  message must be congruent to 448 mod 512 because 512 - 64 = 448.
-
-  In order to fill up the message length it must be filled with
-  padding that begins with 1 bit followed by all 0 bits. Padding
-  must *always* be present, so if the message length is already
-  congruent to 448 mod 512, then 512 padding bits must be added. */
-
-  // 512 bits == 64 bytes, 448 bits == 56 bytes, 64 bits = 8 bytes
-  // _padding starts with 1 byte with first bit is set in it which
-  // is byte value 128, then there may be up to 63 other pad bytes
-  var len = this.messageLength;
-  var padBytes = new sha1.Buffer();
-  padBytes.data += this.input.bytes();
-  padBytes.data += _sha1.padding.substr(0, 64 - ((len + 8) % 64));
-
-  /* Now append length of the message. The length is appended in bits
-  as a 64-bit number in big-endian order. Since we store the length
-  in bytes, we must multiply it by 8 (or left shift by 3). So here
-  store the high 3 bits in the low end of the first 32-bits of the
-  64-bit number and the lower 5 bits in the high end of the second
-  32-bits. */
-  padBytes.putInt32((len >>> 29) & 0xFF);
-  padBytes.putInt32((len << 3) & 0xFFFFFFFF);
-  _sha1.update(this.state, this.words, padBytes);
-  var rval = new sha1.Buffer();
-  rval.putInt32(this.state.h0);
-  rval.putInt32(this.state.h1);
-  rval.putInt32(this.state.h2);
-  rval.putInt32(this.state.h3);
-  rval.putInt32(this.state.h4);
-  return rval.toHex();
-};
-
-// private SHA-1 data
-var _sha1 = {
-  padding: null,
-  initialized: false
-};
-
-/**
- * Initializes the constant tables.
- */
-_sha1.init = function() {
-  // create padding
-  _sha1.padding = String.fromCharCode(128);
-  var c = String.fromCharCode(0x00);
-  var n = 64;
-  while(n > 0) {
-    if(n & 1) {
-      _sha1.padding += c;
-    }
-    n >>>= 1;
-    if(n > 0) {
-      c += c;
-    }
-  }
-
-  // now initialized
-  _sha1.initialized = true;
-};
-
-/**
- * Updates a SHA-1 state with the given byte buffer.
- *
- * @param s the SHA-1 state to update.
- * @param w the array to use to store words.
- * @param input the input byte buffer.
- */
-_sha1.update = function(s, w, input) {
-  // consume 512 bit (64 byte) chunks
-  var t, a, b, c, d, e, f, i;
-  var len = input.length();
-  while(len >= 64) {
-    // the w array will be populated with sixteen 32-bit big-endian words
-    // and then extended into 80 32-bit words according to SHA-1 algorithm
-    // and for 32-79 using Max Locktyukhin's optimization
-
-    // initialize hash value for this chunk
-    a = s.h0;
-    b = s.h1;
-    c = s.h2;
-    d = s.h3;
-    e = s.h4;
-
-    // round 1
-    for(i = 0; i < 16; ++i) {
-      t = input.getInt32();
-      w[i] = t;
-      f = d ^ (b & (c ^ d));
-      t = ((a << 5) | (a >>> 27)) + f + e + 0x5A827999 + t;
-      e = d;
-      d = c;
-      c = (b << 30) | (b >>> 2);
-      b = a;
-      a = t;
-    }
-    for(; i < 20; ++i) {
-      t = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]);
-      t = (t << 1) | (t >>> 31);
-      w[i] = t;
-      f = d ^ (b & (c ^ d));
-      t = ((a << 5) | (a >>> 27)) + f + e + 0x5A827999 + t;
-      e = d;
-      d = c;
-      c = (b << 30) | (b >>> 2);
-      b = a;
-      a = t;
-    }
-    // round 2
-    for(; i < 32; ++i) {
-      t = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]);
-      t = (t << 1) | (t >>> 31);
-      w[i] = t;
-      f = b ^ c ^ d;
-      t = ((a << 5) | (a >>> 27)) + f + e + 0x6ED9EBA1 + t;
-      e = d;
-      d = c;
-      c = (b << 30) | (b >>> 2);
-      b = a;
-      a = t;
-    }
-    for(; i < 40; ++i) {
-      t = (w[i - 6] ^ w[i - 16] ^ w[i - 28] ^ w[i - 32]);
-      t = (t << 2) | (t >>> 30);
-      w[i] = t;
-      f = b ^ c ^ d;
-      t = ((a << 5) | (a >>> 27)) + f + e + 0x6ED9EBA1 + t;
-      e = d;
-      d = c;
-      c = (b << 30) | (b >>> 2);
-      b = a;
-      a = t;
-    }
-    // round 3
-    for(; i < 60; ++i) {
-      t = (w[i - 6] ^ w[i - 16] ^ w[i - 28] ^ w[i - 32]);
-      t = (t << 2) | (t >>> 30);
-      w[i] = t;
-      f = (b & c) | (d & (b ^ c));
-      t = ((a << 5) | (a >>> 27)) + f + e + 0x8F1BBCDC + t;
-      e = d;
-      d = c;
-      c = (b << 30) | (b >>> 2);
-      b = a;
-      a = t;
-    }
-    // round 4
-    for(; i < 80; ++i) {
-      t = (w[i - 6] ^ w[i - 16] ^ w[i - 28] ^ w[i - 32]);
-      t = (t << 2) | (t >>> 30);
-      w[i] = t;
-      f = b ^ c ^ d;
-      t = ((a << 5) | (a >>> 27)) + f + e + 0xCA62C1D6 + t;
-      e = d;
-      d = c;
-      c = (b << 30) | (b >>> 2);
-      b = a;
-      a = t;
-    }
-
-    // update hash state
-    s.h0 += a;
-    s.h1 += b;
-    s.h2 += c;
-    s.h3 += d;
-    s.h4 += e;
-
-    len -= 64;
-  }
-};
-
-} // end non-nodejs
-
 if(!XMLSerializer) {
 
 var _defineXMLSerializer = function() {
@@ -6791,53 +6433,15 @@ var _defineXMLSerializer = function() {
 
 // define URL parser
 jsonld.url = {};
-if(_nodejs) {
-  var parse = require('url').parse;
-  jsonld.url.parse = function(url) {
-    var parsed = parse(url);
-    parsed.pathname = parsed.pathname || '';
-    _parseAuthority(parsed);
-    parsed.normalizedPath = _removeDotSegments(
-      parsed.pathname, parsed.authority !== '');
-    return parsed;
-  };
-}
-else {
-  // parseUri 1.2.2
-  // (c) Steven Levithan <stevenlevithan.com>
-  // MIT License
-  var parseUri = {};
-  parseUri.options = {
-    key: ['href','protocol','host','auth','user','password','hostname','port','relative','path','directory','file','query','hash'],
-    parser: /^(?:([^:\/?#]+):)?(?:\/\/((?:(([^:@]*)(?::([^:@]*))?)?@)?([^:\/?#]*)(?::(\d*))?))?((((?:[^?#\/]*\/)*)([^?#]*))(?:\?([^#]*))?(?:#(.*))?)/
-  };
-  jsonld.url.parse = function(str) {
-    var o = parseUri.options;
-    var m = o.parser.exec(str);
-    var uri = {};
-    var i = 14;
-    while(i--) {
-      uri[o.key[i]] = m[i] || '';
-    }
-    // normalize to node.js API
-    if(uri.host && uri.path === '') {
-      uri.path = '/';
-    }
-    uri.pathname = uri.path || '';
-    _parseAuthority(uri);
-    uri.normalizedPath = _removeDotSegments(uri.pathname, uri.authority !== '');
-    if(uri.query) {
-      uri.path = uri.path + '?' + uri.query;
-    }
-    if(uri.protocol) {
-      uri.protocol += ':';
-    }
-    if(uri.hash) {
-      uri.hash = '#' + uri.hash;
-    }
-    return uri;
-  };
-}
+var parse = require('url').parse;
+jsonld.url.parse = function(url) {
+  var parsed = parse(url);
+  parsed.pathname = parsed.pathname || '';
+  _parseAuthority(parsed);
+  parsed.normalizedPath = _removeDotSegments(
+    parsed.pathname, parsed.authority !== '');
+  return parsed;
+};
 
 /**
  * Parses the authority for the pre-parsed given URL.
