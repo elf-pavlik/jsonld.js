@@ -31,7 +31,8 @@
     "jsdom": "~0.7.0",
     "pkginfo": "~0.3.0",
     "request": "~2.22.0",
-    "xmldom": "0.1.16"
+    "xmldom": "0.1.16",
+    "tls": "0.0.1"
   },
   "devDependencies": {
     "chai": "~1.7.0",
@@ -59,5 +60,8 @@
     "test": "npm run test-node; npm run test-browser",
     "lint": "jshint js/jsonld.js js/request.js tests/*.js",
     "coverage": "make test-cov"
+  },
+  "browser": {
+    "jsdom": false
   }
 }
