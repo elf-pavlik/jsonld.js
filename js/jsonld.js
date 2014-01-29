@@ -3291,7 +3291,7 @@ function _expandValue(activeCtx, activeProperty, value) {
     return value;
   }
 
-  rval = {};
+  var rval = {};
 
   // other type
   if(type !== null) {
